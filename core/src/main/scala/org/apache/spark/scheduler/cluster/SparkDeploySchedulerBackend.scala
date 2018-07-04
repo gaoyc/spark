@@ -79,13 +79,18 @@ private[spark] class SparkDeploySchedulerBackend(
     // Start executors with a few necessary configs for registering with the scheduler
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
+    // Kigo: 封装命令, 该命令会被发送到worker节点，worker根据命令描述的资源启动后，相当于打开一个通信通道
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
     val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
+    // Kigo: 用ApplicationDescription封装命令
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,
       command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
+    // Kigo: 构建一个应用程序客户端的AppClient实例，并将this设置为该实例的监控器,
+    // AppClient实例内部会将Executor端的消息转发给this
     client = new AppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
+    //
     client.start()
     waitForRegistration()
   }

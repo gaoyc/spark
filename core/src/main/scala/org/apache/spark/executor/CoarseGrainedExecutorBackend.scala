@@ -199,6 +199,12 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     }
   }
 
+  /**
+    *  Kigo: Worker的RPC通信终端接收到LaunchExcutor消息后,会实例化ExecutorRunner对象,然后启动一个线程,
+    *  在线程中解析RegisterApplication的消息封装的ApplicationDescription实例所携带的Command实例，即封装
+    *  的CoarseGrainedExecutorBackend类， 然后启动类，执行main入口函数方法。
+    * @param args
+    */
   def main(args: Array[String]) {
     var driverUrl: String = null
     var executorId: String = null

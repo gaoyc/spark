@@ -256,6 +256,11 @@ private[spark] class AppClient(
 
   }
 
+  /**
+    * 构建一个RPC通信终端,即ClientEndpoint实例, 实例化后再自动调用onStart(), 这时会将封装的
+    * ApplicationDescription实例进一步封装到消息RegisterApplication的实例中,然后右该RPC通信
+    * 终端将该信息发送到Master的RPC通信Endpoint
+    */
   def start() {
     // Just launch an rpcEndpoint; it will call back into the listener.
     endpoint = rpcEnv.setupEndpoint("AppClient", new ClientEndpoint(rpcEnv))
