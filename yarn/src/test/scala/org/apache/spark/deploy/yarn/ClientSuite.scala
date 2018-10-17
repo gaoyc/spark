@@ -60,8 +60,13 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
     withAppConf(Fixtures.mapYARNAppConf) { conf =>
       val env = newEnv
       Client.populateHadoopClasspath(conf, env)
-      classpath(env) should be(
-        flatten(Fixtures.knownYARNAppCP, Client.getDefaultMRApplicationClasspath))
+      // 导入了org.scalatest.Matchers, 引入该类中import scala.language.implicitConversions
+      // 使得classpath方法的返回类型Array有了增强方法Matchers类型should方法
+      val classpathArray = classpath(env)
+      val expect = flatten(Fixtures.knownYARNAppCP, Client.getDefaultMRApplicationClasspath)
+      classpathArray should be(
+        expect
+        )
     }
   }
 
@@ -69,8 +74,15 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
     withAppConf(Fixtures.mapMRAppConf) { conf =>
       val env = newEnv
       Client.populateHadoopClasspath(conf, env)
-      classpath(env) should be(
-        flatten(Client.getDefaultYarnApplicationClasspath, Fixtures.knownMRAppCP))
+//      classpath(env) should be( //
+//        flatten(Client.getDefaultYarnApplicationClasspath, Fixtures.knownMRAppCP))
+
+      // 例如： $HADOOP_COMMON_HOME/share/hadoop/common/*  $HADOOP_HDFS_HOME/share/hadoop/hdfs/lib/*
+      val expect = flatten(Client.getDefaultYarnApplicationClasspath, Fixtures.knownMRAppCP)
+      val classpathArray = classpath(env)
+      classpathArray should be( //
+        expect // windows下测试不相等，因为expect变量例如%HADOOP_CONF_DIR%, 而计算得到classpath为$HADOOP_CONF_DIR
+        )
     }
   }
 
@@ -118,7 +130,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
     cp should not contain (Client.APP_JAR)
   }
 
-  test("Jar path propagation through SparkConf") {
+  test("Jar path propagation through SparkConf") { // jar path传播
     val conf = new Configuration()
     val sparkConf = new SparkConf().set(Client.CONF_SPARK_JAR, SPARK)
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)

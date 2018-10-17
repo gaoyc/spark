@@ -53,7 +53,7 @@ private[spark] class YarnClientSchedulerBackend(
     val args = new ClientArguments(argsArrayBuf.toArray, conf)
     totalExpectedExecutors = args.numExecutors
     client = new Client(args, conf)
-    appId = client.submitApplication()
+    appId = client.submitApplication() // 提交应用到ResourceManger，启动运行ApplicationMaster
 
     // SPARK-8687: Ensure all necessary properties have already been set before
     // we initialize our driver scheduler backend, which serves these properties

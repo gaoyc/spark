@@ -54,6 +54,12 @@ private[spark] class CoarseGrainedExecutorBackend(
   // to be changed so that we don't share the serializer instance across threads
   private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
+  /**
+    * 向driverURL代表的endpoint发送RegisterExecutor信息
+    * Driver中的SparkDeploySchedulerBackend实例接收到RegisterExecutor消息后，
+    * 表示有可用资源注册上来， 此时即可开始作业的调度。具体调度过程可以参考
+    * Spark调度器Scheduler的运行机制
+    */
   override def onStart() {
     logInfo("Connecting to driver: " + driverUrl)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
@@ -189,6 +195,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       // Start the CoarseGrainedExecutorBackend endpoint.
       val sparkHostPort = hostname + ":" + boundPort
+      // Kigo: 构建rpc通信endpoint,自动调用onStart方法, 向driverURL代表的endpoint发送RegisterExecutor信息
       env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
         env.rpcEnv, driverUrl, executorId, sparkHostPort, cores, userClassPath, env))
       workerUrl.foreach { url =>
@@ -252,7 +259,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       appId == null) {
       printUsageAndExit()
     }
-
+    // 核心启动方法
     run(driverUrl, executorId, hostname, cores, appId, workerUrl, userClassPath)
   }
 

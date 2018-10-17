@@ -116,11 +116,14 @@ private[spark] class Client(
       verifyClusterResources(newAppResponse)
 
       // Set up the appropriate contexts to launch our AM
+      // 创建ApplicationMaster ContainerLaunch上下文，将ContainerLaunch命令、jar包、java变量, main主类入口等环境准备完毕；
       val containerContext = createContainerLaunchContext(newAppResponse)
+      // 创建Application提交至YARN的上下文，主要读取配置文件设置调用YARN接口前的上下文变量。
       val appContext = createApplicationSubmissionContext(newApp, containerContext)
 
       // Finally, submit and monitor the application
       logInfo(s"Submitting application ${appId.getId} to ResourceManager")
+      // 通过YarnClient提及应用接口，向ResourceManager提交前面创建applicationMaster应用程序,已启动AM Container
       yarnClient.submitApplication(appContext)
       appId
     } catch {
@@ -350,6 +353,7 @@ private[spark] class Client(
     }
 
     /**
+     *  Kigo: 复制指定的资源(非local开头)到分布式缓存.
      * Copy the given main resource to the distributed cache if the scheme is not "local".
      * Otherwise, set the corresponding key in our SparkConf to handle it downstream.
      * Each resource is represented by a 3-tuple of:
@@ -357,6 +361,7 @@ private[spark] class Client(
      *   (2) local path to the resource,
      *   (3) Spark property key to set if the scheme is not local
      */
+    // 三元组格式(目的资源名称, 待上传本地资源路径, spark配置key)
     List(
       (SPARK_JAR, sparkJar(sparkConf), CONF_SPARK_JAR),
       (APP_JAR, args.userJar, CONF_SPARK_USER_JAR),
@@ -514,6 +519,7 @@ private[spark] class Client(
     logInfo("Setting up the launch environment for our AM container")
     val env = new HashMap[String, String]()
     val extraCp = sparkConf.getOption("spark.driver.extraClassPath")
+    // Kigo: 打包上传jar, file核心逻辑
     populateClasspath(args, yarnConf, sparkConf, env, true, extraCp)
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
@@ -625,6 +631,7 @@ private[spark] class Client(
       } else {
         Nil
       }
+    // Kigo: 核心方法: 创建登陆 ApplicationMaster container的环境变量, 包括打包上传jar, file核心逻辑
     val launchEnv = setupLaunchEnv(appStagingDir, pySparkArchives)
     val localResources = prepareLocalResources(appStagingDir, pySparkArchives)
 
@@ -672,7 +679,7 @@ private[spark] class Client(
     }
 
     // Include driver-specific java options if we are launching a driver
-    if (isClusterMode) {
+    if (isClusterMode) { // YARN CLUSTER 模式
       val driverOpts = sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
       driverOpts.foreach { opts =>
@@ -686,7 +693,7 @@ private[spark] class Client(
       if (sparkConf.getOption("spark.yarn.am.extraJavaOptions").isDefined) {
         logWarning("spark.yarn.am.extraJavaOptions will not take effect in cluster mode")
       }
-    } else {
+    } else { // YARN CLIENT 模式
       // Validate and include yarn am specific java options in yarn-client mode.
       val amOptsKey = "spark.yarn.am.extraJavaOptions"
       val amOpts = sparkConf.getOption(amOptsKey)
@@ -734,10 +741,10 @@ private[spark] class Client(
       } else {
         Nil
       }
-    val amClass =
-      if (isClusterMode) {
+    val amClass = // 设置Application启动的主类：
+      if (isClusterMode) { // yarn cluster模式am的主类
         Utils.classForName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
-      } else {
+      } else {// yarn client模式am的主类
         Utils.classForName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName
       }
     if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
@@ -1015,14 +1022,14 @@ object Client extends Logging {
    * user environment if that is not found (for backwards compatibility).
    */
   private def sparkJar(conf: SparkConf): String = {
-    if (conf.contains(CONF_SPARK_JAR)) {
+    if (conf.contains(CONF_SPARK_JAR)) { // 优先读取sparkConf配置的spark.yarn.jar的spark jar包
       conf.get(CONF_SPARK_JAR)
-    } else if (System.getenv(ENV_SPARK_JAR) != null) {
+    } else if (System.getenv(ENV_SPARK_JAR) != null) {// 其次使用环境变量中的SPARK_JAR配置，该方式已过期
       logWarning(
         s"$ENV_SPARK_JAR detected in the system environment. This variable has been deprecated " +
           s"in favor of the $CONF_SPARK_JAR configuration variable.")
       System.getenv(ENV_SPARK_JAR)
-    } else {
+    } else { // 如上均无设置，则默认使用SparkContext类所在的jar
       SparkContext.jarOfClass(this.getClass).head
     }
   }

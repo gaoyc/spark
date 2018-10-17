@@ -153,7 +153,7 @@ private[spark] class ApplicationMaster(
 
       if (isClusterMode) {
         runDriver(securityMgr)
-      } else {
+      } else {// yarn client模式
         runExecutorLauncher(securityMgr)
       }
     } catch {
