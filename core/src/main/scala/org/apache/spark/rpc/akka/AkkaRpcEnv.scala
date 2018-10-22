@@ -273,7 +273,7 @@ private[akka] class ErrorMonitor extends Actor with ActorLogReceive with Logging
 
 private[akka] class AkkaRpcEndpointRef(
     @transient defaultAddress: RpcAddress,
-    @transient _actorRef: => ActorRef,
+    @transient _actorRef: => ActorRef, // 函数作为参数. _actorRef是一个返回类型为ActorRef的函数
     @transient conf: SparkConf,
     @transient initInConstructor: Boolean = true)
   extends RpcEndpointRef(conf) with Logging {

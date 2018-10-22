@@ -101,6 +101,8 @@ private[spark] class AppClient(
             logInfo("Connecting to master " + masterAddress.toSparkURL + "...")
             val masterRef =
               rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, masterAddress, Master.ENDPOINT_NAME)
+            // kigo: 向Master发送RegisterApplication消息，注册Application
+            // Master也是RpcEndpoint的之类,可以通过receive方法接收到DeployMessage类型的RegisterApplication消息
             masterRef.send(RegisterApplication(appDescription, self))
           } catch {
             case ie: InterruptedException => // Cancelled
@@ -118,16 +120,16 @@ private[spark] class AppClient(
      * nthRetry means this is the nth attempt to register with master.
      */
     private def registerWithMaster(nthRetry: Int) {
-      registerMasterFutures = tryRegisterAllMasters()
+      registerMasterFutures = tryRegisterAllMasters() // kigo: 向所有Master异步尝试注册Appliation
       registrationRetryTimer = registrationRetryThread.scheduleAtFixedRate(new Runnable {
         override def run(): Unit = {
           Utils.tryOrExit {
-            if (registered) {
+            if (registered) { // kigo: 如果注册成功，取消向其他Master注册
               registerMasterFutures.foreach(_.cancel(true))
               registerMasterThreadPool.shutdownNow()
-            } else if (nthRetry >= REGISTRATION_RETRIES) {
+            } else if (nthRetry >= REGISTRATION_RETRIES) {// kigo: 注册尝试次数大于默认2次，即失败
               markDead("All masters are unresponsive! Giving up.")
-            } else {
+            } else { // kigo: 未超过阈值，继续尝试注册
               registerMasterFutures.foreach(_.cancel(true))
               registerWithMaster(nthRetry + 1)
             }
@@ -158,9 +160,9 @@ private[spark] class AppClient(
         // RegisteredApplications due to an unstable network.
         // 2. Receive multiple RegisteredApplication from different masters because the master is
         // changing.
-        appId = appId_
-        registered = true
-        master = Some(masterRef)
+        appId = appId_  // kigo: 保存Master返回的appId
+        registered = true // 标记Application注册完毕。引导registerWithMaster方法停止继续尝试注册
+        master = Some(masterRef) // 保存Master的通信终端endPoint引用
         listener.connected(appId)
 
       case ApplicationRemoved(message) =>
@@ -262,6 +264,10 @@ private[spark] class AppClient(
     * 终端将该信息发送到Master的RPC通信Endpoint
     */
   def start() {
+    // kigo: 启动主要功能是构建一个通信终端endpoint, 用以向Master注册当前Appliation, endpoint实例对象时AppClient的内部类
+    // ClientEndpoint. ClientEndpoint是RpcEndpoint的子类，生命周期如下:constructor -> onStart -> receive -> onStop，其
+    // 中向Master注册当前Appliation的主要实现即在该endpoint的onStart方法
+
     // Just launch an rpcEndpoint; it will call back into the listener.
     endpoint = rpcEnv.setupEndpoint("AppClient", new ClientEndpoint(rpcEnv))
   }

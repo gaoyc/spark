@@ -511,16 +511,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
-    // Create and start the scheduler
+    // Create and start the scheduler // by kigo: 创建与初始化调度器(SchedulerBackend, TaskScheduler)
     val (sched, ts) = SparkContext.createTaskScheduler(this, master)
     _schedulerBackend = sched
     _taskScheduler = ts
-    _dagScheduler = new DAGScheduler(this)
+    _dagScheduler = new DAGScheduler(this) //主要通过sparkContext， taskScheduler对象实例化.DagScheduler提交TaskSet给他底层调度器时是面向TaskScheduler接口,带来底层资源调度器的可插拔性,使得Spark可以运行在多种部署模式上，例如Standalone，YARN， Mesos
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
     // constructor
-    _taskScheduler.start()
+    _taskScheduler.start() //kigo: 启动TaskScheduler, 内部调用对应SchedulerBackend实例的start(). 底层任务调度器启动后，等待DAGScheduler提交TaskSet给TaskScheuler
 
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = taskScheduler.applicationAttemptId()
@@ -2656,8 +2656,8 @@ object SparkContext extends Logging {
       case "yarn-client" =>
         val scheduler = try {
           val clazz = Utils.classForName("org.apache.spark.scheduler.cluster.YarnScheduler")
-          val cons = clazz.getConstructor(classOf[SparkContext])
-          cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
+          val cons = clazz.getConstructor(classOf[SparkContext]) // 获取参数为SparkContent的构造方法
+          cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl] //初始化scheduler实例, 构造参数传入sc对象
 
         } catch {
           case e: Exception => {
@@ -2676,7 +2676,7 @@ object SparkContext extends Logging {
           }
         }
 
-        scheduler.initialize(backend)
+        scheduler.initialize(backend) //根据不同的调度模式，创建调度池
         (backend, scheduler)
 
       case mesosUrl @ MESOS_REGEX(_) =>

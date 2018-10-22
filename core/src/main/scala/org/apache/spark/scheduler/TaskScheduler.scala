@@ -53,6 +53,7 @@ private[spark] trait TaskScheduler {
   // Cancel a stage.
   def cancelTasks(stageId: Int, interruptThread: Boolean)
 
+  // kigo: 在实例化DAGScheduler对象时，需要设置提交TaskSet给它的DAGScheduler实例对象的引用
   // Set the DAG scheduler for upcalls. This is guaranteed to be set before submitTasks is called.
   def setDAGScheduler(dagScheduler: DAGScheduler): Unit
 

@@ -258,17 +258,27 @@ private[deploy] class Master(
       }
     }
 
-    case RegisterApplication(description, driver) => {
+    case RegisterApplication(description, driver) => { // kigo: application应用程序注册消息
       // TODO Prevent repeated registrations from some driver
       if (state == RecoveryState.STANDBY) {
         // ignore, don't send response
       } else {
         logInfo("Registering app " + description.name)
+        // kigo: 创建ApplicationInfo实例，封装如系统时间,applicationID, 默认application需要的最大cpu core数量和
+        // ClientEndpoint引用等信息
         val app = createApplication(description, driver)
+        // 注册Appliation到Master（内存保存）
         registerApplication(app)
         logInfo("Registered app " + description.name + " with ID " + app.id)
+        // 持久化Application，以便错误时能恢复
         persistenceEngine.addApplication(app)
+        // 向AppClient endpoint发送master的注册RegisterApplication处理结果。
+        // AppClient.ClientEndpoint在receive方法中会接收到该Master所发送的确认消息
         driver.send(RegisteredApplication(app.id, self))
+        // 给注册好的Application分配executor资源, 在worker节点启动分配好Executor给application使用.
+        // 具体如何把exector分配给application，参考Executor的具体实现。核心流程为:
+        //    Master向Worker节点发送LaunchExecutor请求, 满足请求的Worker节点启动线程运行ExecutorRunner, 在ExecutorRunner
+        // 中启动CoarseGrainedExecutorBackend, 在CoarseGrainedExecutorBackend中创建Executor, 并完成向Driver注册.
         schedule()
       }
     }
@@ -387,6 +397,8 @@ private[deploy] class Master(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    // kigo: Standalone模式下使用SparkSubmit命令提交application时会触发Client先向Master注册Driver信息，其后再由Driver中的
+    // SchedulerBackend的start方法启动时候,触发AppClient在构建endpoint时（onStart时）向Master注册当前Application
     case RequestSubmitDriver(description) => {
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
@@ -547,6 +559,8 @@ private[deploy] class Master(
   }
 
   /**
+   * kigo: 调度workers启动执行器。 两种启动executor
+   *
    * Schedule executors to be launched on the workers.
    * Returns an array containing number of cores assigned to each worker.
    *
@@ -611,9 +625,9 @@ private[deploy] class Master(
 
           // If we are launching one executor per worker, then every iteration assigns 1 core
           // to the executor. Otherwise, every iteration assigns cores to a new executor.
-          if (oneExecutorPerWorker) {
+          if (oneExecutorPerWorker) { // 每个worker启动一个Executor的原则
             assignedExecutors(pos) = 1
-          } else {
+          } else { // 将Executor尽可能集中在尽量少的worker上的spread_out原则
             assignedExecutors(pos) += 1
           }
 
@@ -687,6 +701,9 @@ private[deploy] class Master(
     // Drivers take strict precedence over executors
     val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
     for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
+      // kigo: Standalone模式下使用SparkSubmit命令提交application时会触发Client先向Master注册Driver信息(Driver的
+      // receiveAndReply方法接收处理RequestSubmitDriver消息)，其后再由Driver中的
+      // SchedulerBackend的start方法启动时候,触发AppClient在构建endpoint时（onStart时）向Master注册当前Application
       for (driver <- waitingDrivers) {
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
           launchDriver(worker, driver)
@@ -700,8 +717,13 @@ private[deploy] class Master(
   private def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc): Unit = {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
+    // 向Worker发送LaunchExecutor消息，通知worker启动executor
     worker.endpoint.send(LaunchExecutor(masterUrl,
       exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory))
+    // kigo: 将ExecutorAdded消息发送给driver，通知driver加入executor. Driver端处理该的消息入口在SchedulerBackend.start时
+    // 所创建的通信终端的中处理该消息. 对于standalone模式集群,SparkContext初始化所触发创建的Driver通信终端处理是
+    // SparkDeploySchedulerBackend及其父类CoarseGrainedSchedulerBackend启动时(start)所创建的ClientEndpoint
+    // （AppClient.start方法触发构建）及DriverEndpoint
     exec.application.driver.send(ExecutorAdded(
       exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
   }
@@ -777,7 +799,7 @@ private[deploy] class Master(
       logInfo("Attempted to re-register application at same address: " + appAddress)
       return
     }
-
+    // kigo: 将注册好的Application加入到apps缓存变量中
     applicationMetricsSystem.registerSource(app.appSource)
     apps += app
     idToApp(app.id) = app

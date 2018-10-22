@@ -312,14 +312,14 @@ private[yarn] class YarnAllocator(
   def handleAllocatedContainers(allocatedContainers: Seq[Container]): Unit = {
     val containersToUse = new ArrayBuffer[Container](allocatedContainers.size)
 
-    // Match incoming requests by host
+    // Match incoming requests by host //优先在本机的container分配
     val remainingAfterHostMatches = new ArrayBuffer[Container]
     for (allocatedContainer <- allocatedContainers) {
       matchContainerToRequest(allocatedContainer, allocatedContainer.getNodeId.getHost,
         containersToUse, remainingAfterHostMatches)
     }
 
-    // Match remaining by rack
+    // Match remaining by rack //优先在本机架的container分配
     val remainingAfterRackMatches = new ArrayBuffer[Container]
     for (allocatedContainer <- remainingAfterHostMatches) {
       val rack = RackResolver.resolve(conf, allocatedContainer.getNodeId.getHost).getNetworkLocation
@@ -327,14 +327,14 @@ private[yarn] class YarnAllocator(
         remainingAfterRackMatches)
     }
 
-    // Assign remaining that are neither node-local nor rack-local
+    // Assign remaining that are neither node-local nor rack-local //在非本机，非本机架的container分配
     val remainingAfterOffRackMatches = new ArrayBuffer[Container]
     for (allocatedContainer <- remainingAfterRackMatches) {
       matchContainerToRequest(allocatedContainer, ANY_HOST, containersToUse,
         remainingAfterOffRackMatches)
     }
 
-    if (!remainingAfterOffRackMatches.isEmpty) {
+    if (!remainingAfterOffRackMatches.isEmpty) { // 释放RM分配多余的container资源
       logDebug(s"Releasing ${remainingAfterOffRackMatches.size} unneeded containers that were " +
         s"allocated to us")
       for (container <- remainingAfterOffRackMatches) {
@@ -342,7 +342,7 @@ private[yarn] class YarnAllocator(
       }
     }
 
-    runAllocatedContainers(containersToUse)
+    runAllocatedContainers(containersToUse) // 启动container
 
     logInfo("Received %d containers from YARN, launching executors on %d of them."
       .format(allocatedContainers.size, containersToUse.size))

@@ -79,7 +79,7 @@ class DAGScheduler(
       sc.env.blockManager.master,
       sc.env)
   }
-
+  // kigo: 设置将要提交TaskSet的TaskScheduler实例对象引用
   def this(sc: SparkContext) = this(sc, sc.taskScheduler)
 
   private[scheduler] val metricsSource: DAGSchedulerSource = new DAGSchedulerSource(this)
@@ -875,7 +875,7 @@ class DAGScheduler(
 
     val tasks: Seq[Task[_]] = try {
       stage match {
-        case stage: ShuffleMapStage =>
+        case stage: ShuffleMapStage =>  // 对于ShuffleMapStage，初始化一组ShuffleMapTask
           partitionsToCompute.map { id =>
             val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
@@ -883,7 +883,7 @@ class DAGScheduler(
               taskBinary, part, locs, stage.internalAccumulators)
           }
 
-        case stage: ResultStage =>
+        case stage: ResultStage =>  // 对于ResultStage，初始化一组ResultTask
           val job = stage.resultOfJob.get
           partitionsToCompute.map { id =>
             val p: Int = job.partitions(id)
@@ -904,6 +904,7 @@ class DAGScheduler(
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       stage.pendingTasks ++= tasks
       logDebug("New pending tasks: " + stage.pendingTasks)
+      // kigo: 将生成的书友Task封装成一个TaskSet，提交给taskScheduler，实际调用TaskSchedulerImpl的submitTasks方法进一步处理
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptId, stage.firstJobId, properties))
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())

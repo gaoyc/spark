@@ -128,7 +128,7 @@ private[spark] object AkkaUtils extends Logging {
 
   /** Returns the configured max frame size for Akka messages in bytes. */
   def maxFrameSizeBytes(conf: SparkConf): Int = {
-    val frameSizeInMB = conf.getInt("spark.akka.frameSize", 128)
+    val frameSizeInMB = conf.getInt("spark.akka.frameSize", 128) // Akka帧默认128M， 预留空间默认200K
     if (frameSizeInMB > AKKA_MAX_FRAME_SIZE_IN_MB) {
       throw new IllegalArgumentException(
         s"spark.akka.frameSize should not be greater than $AKKA_MAX_FRAME_SIZE_IN_MB MB")

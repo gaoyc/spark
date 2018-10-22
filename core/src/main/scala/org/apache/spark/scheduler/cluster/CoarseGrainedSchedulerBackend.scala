@@ -113,7 +113,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
         }
 
+      // kigo: 由TaskSchedulerImpl的submitTasks方法触发的(Spark Standalone部署模式调用
+      // SparkDeploySchedulerBackend的reciveOffers方法)TaskSet所需要资源分配申请消息
       case ReviveOffers =>
+        // 回调DriverEndpoint的makeOffers方法
         makeOffers()
 
       case KillTask(taskId, executorId, interruptThread) =>
@@ -177,10 +180,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Make fake resource offers on all executors
     private def makeOffers() {
       // Filter out executors under killing
-      val activeExecutors = executorDataMap.filterKeys(!executorsPendingToRemove.contains(_))
+      val activeExecutors = executorDataMap.filterKeys(!executorsPendingToRemove.contains(_)) // 筛选active状态的executor
       val workOffers = activeExecutors.map { case (id, executorData) =>
+          // kigo: 构建代表Executor可用资源的WorkerOffer
         new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
       }.toSeq
+      // scheduler.resourceOffers(workOffers)得到TaskDescription二位数组，包含TaskID, Executor ID和Task Index
+      // launchTasks方法向executor发送执行Task的LaunchTask消息(实际由CoarseGrainedExecutorBackend转发LaunchTasks消息)
       launchTasks(scheduler.resourceOffers(workOffers))
     }
 
@@ -202,8 +208,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Launch tasks returned by a set of resource offers
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
-      for (task <- tasks.flatten) {
-        val serializedTask = ser.serialize(task)
+      for (task <- tasks.flatten) { // 扁平化Tasks
+        val serializedTask = ser.serialize(task) // 序列化Task
+        // kigo:  serializedTask如果大于Akka帧减去预留空间，则abort终止该任务. Akka帧默认128M， 预留空间默认200K
         if (serializedTask.limit >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
           scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
             try {
@@ -218,7 +225,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             }
           }
         }
-        else {
+        else {// 序列化Task大小为超过阈值，则启动task， 将LaunchTask消息发送到CoarseGrainedExecutorBackend
           val executorData = executorDataMap(task.executorId)
           executorData.freeCores -= scheduler.CPUS_PER_TASK
           executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
@@ -254,6 +261,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   var driverEndpoint: RpcEndpointRef = null
   val taskIdsOnSlave = new HashMap[String, HashSet[String]]
 
+  /**
+    * kigo: 主要创建注册DriverEndpoint, 主要用以接收ExecutorBackend的registerExecutor消息
+    */
   override def start() {
     val properties = new ArrayBuffer[(String, String)]
     for ((key, value) <- scheduler.sc.conf.getAll) {
@@ -261,7 +271,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         properties += ((key, value))
       }
     }
-
+    // kigo: 创建注册DriverEndpoint, 主要用以接收ExecutorBackend的registerExecutor消息
+    // kigo:  DriverEndpoint是RpcEndpoint的子类，生命周期如下:constructor -> onStart -> receive -> onStop，其
+    // 中，接收注册消息主要实现即在该endpoint的onStart中
     // TODO (prashant) send conf instead of properties
     driverEndpoint = rpcEnv.setupEndpoint(
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME, new DriverEndpoint(rpcEnv, properties))

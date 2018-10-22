@@ -123,7 +123,11 @@ private[spark] class TaskSchedulerImpl(
     this.dagScheduler = dagScheduler
   }
 
-  def initialize(backend: SchedulerBackend) { // sparkContext创建SchedulerBackend, TaskScheduler后，由scheduler.initialize(backend)调用初始化
+  /**
+    * 根据不同的调度模式，创建调度池
+    * @param backend
+    */
+  def initialize(backend: SchedulerBackend) {
     this.backend = backend
     // temporarily set rootPool name to empty
     rootPool = new Pool("", schedulingMode, 0, 0)
@@ -161,7 +165,7 @@ private[spark] class TaskSchedulerImpl(
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
-      val manager = createTaskSetManager(taskSet, maxTaskFailures)
+      val manager = createTaskSetManager(taskSet, maxTaskFailures) // kigo: 针对taskSet初始化一个TaskSetManager，其后通过schedulableBuilder对其进行管理
       val stage = taskSet.stageId
       val stageTaskSets =
         taskSetsByStageIdAndAttempt.getOrElseUpdate(stage, new HashMap[Int, TaskSetManager])
@@ -173,8 +177,8 @@ private[spark] class TaskSchedulerImpl(
         throw new IllegalStateException(s"more than one active taskSet for stage $stage:" +
           s" ${stageTaskSets.toSeq.map{_._2.taskSet.id}.mkString(",")}")
       }
-      schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
-
+      schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties) // kigo: 通过schedulableBuilder对TaskSetManager进行管理
+      // kigo: 对于非本地部署模式，如果没有接收到Task，就周期性地进攻或者取消task
       if (!isLocal && !hasReceivedTask) {
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
           override def run() {
@@ -190,6 +194,8 @@ private[spark] class TaskSchedulerImpl(
       }
       hasReceivedTask = true
     }
+    // kigo: 调用SchedulerBackend的reviveOffers对taskSet所需要的资源进行分配, 在TaskSet的得到足够的资源后，在SchedulerBackend
+    // launchTasks方法将TaskSet中的Task一个个的发送到Executor去执行
     backend.reviveOffers()
   }
 
@@ -283,7 +289,7 @@ private[spark] class TaskSchedulerImpl(
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
       activeExecutorIds += o.executorId
-      if (!executorsByHost.contains(o.host)) {
+      if (!executorsByHost.contains(o.host)) {// 如果不存在，则加入新的executors
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
         newExecAvail = true
@@ -292,12 +298,13 @@ private[spark] class TaskSchedulerImpl(
         hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += o.host
       }
     }
-
+     // 随机打散Task，避免总是将Tasks放到某些workers
     // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
     val shuffledOffers = Random.shuffle(offers)
-    // Build a list of tasks to assign to each worker.
+    // Build a list of tasks to assign to each worker. 构建已分配好资源的Task
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
+    // kigo: 根据调度模式排序好TaskSets
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
@@ -306,13 +313,14 @@ private[spark] class TaskSchedulerImpl(
         taskSet.executorAdded()
       }
     }
-
+    // kigo: 按照调度模式排序好的TaskSet, 逐一取出，按照优先分配的就近原则分配资源
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     var launchedTask = false
     for (taskSet <- sortedTaskSets; maxLocality <- taskSet.myLocalityLevels) {
       do {
+        // 为每个TaskSet分配Executor和CPU cores资源
         launchedTask = resourceOfferSingleTaskSet(
             taskSet, maxLocality, shuffledOffers, availableCpus, tasks)
       } while (launchedTask)

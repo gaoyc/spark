@@ -80,7 +80,7 @@ private[spark] class SparkDeploySchedulerBackend(
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     // Kigo: 封装命令, 该命令会被发送到worker节点，worker根据命令描述的资源启动后，相当于打开一个通信通道
-    val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
+    val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend", // kigo: 指定当前应用程序启动Executor进程的入口类
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
     val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
@@ -90,7 +90,7 @@ private[spark] class SparkDeploySchedulerBackend(
     // Kigo: 构建一个应用程序客户端的AppClient实例，并将this设置为该实例的监控器,
     // AppClient实例内部会将Executor端的消息转发给this
     client = new AppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
-    //
+    // kigo: 启动AppClient，用于Application与spark集群通信
     client.start()
     waitForRegistration()
   }
