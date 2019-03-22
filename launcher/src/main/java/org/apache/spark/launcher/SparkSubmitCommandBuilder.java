@@ -83,9 +83,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   static {
     specialClasses.put("org.apache.spark.repl.Main", "spark-shell");
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
-      SparkLauncher.NO_RESOURCE);
+            SparkLauncher.NO_RESOURCE);
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
-      SparkLauncher.NO_RESOURCE);
+            SparkLauncher.NO_RESOURCE);
+    // add by kigo for: carbon thriftServer
+    specialClasses.put("org.apache.carbondata.spark.thriftserver.CarbonThriftServer",
+            SparkLauncher.NO_RESOURCE);
+    specialClasses.put("org.apache.spark.sql.hive.cli.CarbonSQLCLIDriver",
+            SparkLauncher.NO_RESOURCE);
   }
 
   final List<String> sparkArgs;
@@ -142,7 +147,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   @Override
   public List<String> buildCommand(Map<String, String> env)
-      throws IOException, IllegalArgumentException {
+          throws IOException, IllegalArgumentException {
     if (PYSPARK_SHELL.equals(appResource) && isAppResourceReq) {
       return buildPySparkShellCommand(env);
     } else if (SPARKR_SHELL.equals(appResource) && isAppResourceReq) {
@@ -226,7 +231,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   private List<String> buildSparkSubmitCommand(Map<String, String> env)
-      throws IOException, IllegalArgumentException {
+          throws IOException, IllegalArgumentException {
     // Load the properties file and check whether spark-submit will be running the app's driver
     // or just launching a cluster app. When running the driver, the JVM's argument will be
     // modified to cover the driver's configuration.
@@ -247,8 +252,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     String driverExtraJavaOptions = config.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS);
     if (!isEmpty(driverExtraJavaOptions) && driverExtraJavaOptions.contains("Xmx")) {
       String msg = String.format("Not allowed to specify max heap(Xmx) memory settings through " +
-                   "java options (was %s). Use the corresponding --driver-memory or " +
-                   "spark.driver.memory configuration instead.", driverExtraJavaOptions);
+              "java options (was %s). Use the corresponding --driver-memory or " +
+              "spark.driver.memory configuration instead.", driverExtraJavaOptions);
       throw new IllegalArgumentException(msg);
     }
 
@@ -262,13 +267,13 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       // - default value (1g)
       // Take Thrift Server as daemon
       String tsMemory =
-        isThriftServer(mainClass) ? System.getenv("SPARK_DAEMON_MEMORY") : null;
+              isThriftServer(mainClass) ? System.getenv("SPARK_DAEMON_MEMORY") : null;
       String memory = firstNonEmpty(tsMemory, config.get(SparkLauncher.DRIVER_MEMORY),
-        System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
+              System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
       cmd.add("-Xmx" + memory);
       addOptionString(cmd, driverExtraJavaOptions);
       mergeEnvPathList(env, getLibPathEnvName(),
-        config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
+              config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
     }
 
     addPermGenSizeOpt(cmd);
@@ -282,8 +287,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // the pyspark command line, then run it using spark-submit.
     if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".py")) {
       System.err.println(
-        "Running python applications through 'pyspark' is not supported as of Spark 2.0.\n" +
-        "Use ./bin/spark-submit <python file>");
+              "Running python applications through 'pyspark' is not supported as of Spark 2.0.\n" +
+                      "Use ./bin/spark-submit <python file>");
       System.exit(-1);
     }
 
@@ -302,10 +307,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // 5. python
     List<String> pyargs = new ArrayList<>();
     pyargs.add(firstNonEmpty(conf.get(SparkLauncher.PYSPARK_DRIVER_PYTHON),
-      conf.get(SparkLauncher.PYSPARK_PYTHON),
-      System.getenv("PYSPARK_DRIVER_PYTHON"),
-      System.getenv("PYSPARK_PYTHON"),
-      "python"));
+            conf.get(SparkLauncher.PYSPARK_PYTHON),
+            System.getenv("PYSPARK_DRIVER_PYTHON"),
+            System.getenv("PYSPARK_PYTHON"),
+            "python"));
     String pyOpts = System.getenv("PYSPARK_DRIVER_PYTHON_OPTS");
     if (conf.containsKey(SparkLauncher.PYSPARK_PYTHON)) {
       // pass conf spark.pyspark.python to python by environment variable.
@@ -321,8 +326,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   private List<String> buildSparkRCommand(Map<String, String> env) throws IOException {
     if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".R")) {
       System.err.println(
-        "Running R applications through 'sparkR' is not supported as of Spark 2.0.\n" +
-        "Use ./bin/spark-submit <R file>");
+              "Running R applications through 'sparkR' is not supported as of Spark 2.0.\n" +
+                      "Use ./bin/spark-submit <R file>");
       System.exit(-1);
     }
     // When launching the SparkR shell, store the spark-submit arguments in the SPARKR_SUBMIT_ARGS
@@ -337,15 +342,15 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     List<String> args = new ArrayList<>();
     args.add(firstNonEmpty(conf.get(SparkLauncher.SPARKR_R_SHELL),
-      System.getenv("SPARKR_DRIVER_R"), "R"));
+            System.getenv("SPARKR_DRIVER_R"), "R"));
     return args;
   }
 
   private void constructEnvVarArgs(
-      Map<String, String> env,
-      String submitArgsEnvVariable) throws IOException {
+          Map<String, String> env,
+          String submitArgsEnvVariable) throws IOException {
     mergeEnvPathList(env, getLibPathEnvName(),
-      getEffectiveConfig().get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
+            getEffectiveConfig().get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
 
     StringBuilder submitArgs = new StringBuilder();
     for (String arg : buildSparkSubmitArgs()) {
@@ -362,16 +367,16 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     String userDeployMode = firstNonEmpty(deployMode, userProps.get(SparkLauncher.DEPLOY_MODE));
     // Default master is "local[*]", so assume client mode in that case
     return userMaster == null ||
-      "client".equals(userDeployMode) ||
-      (!userMaster.equals("yarn-cluster") && userDeployMode == null);
+            "client".equals(userDeployMode) ||
+            (!userMaster.equals("yarn-cluster") && userDeployMode == null);
   }
 
   /**
    * Return whether the given main class represents a thrift server.
    */
-  private boolean isThriftServer(String mainClass) {
+  private boolean isThriftServer(String mainClass) { // modify by kigo for: carbon thrift Server
     return (mainClass != null &&
-      mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"));
+            ( mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2")) || mainClass.equals("org.apache.carbondata.spark.thriftserver.CarbonThriftServer"));
   }
 
   private List<String> findExamplesJars() {
@@ -384,12 +389,12 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       jarsDir = new File(sparkHome, "examples/jars");
     } else {
       jarsDir = new File(sparkHome,
-        String.format("examples/target/scala-%s/jars", getScalaVersion()));
+              String.format("examples/target/scala-%s/jars", getScalaVersion()));
     }
 
     boolean foundDir = jarsDir.isDirectory();
     checkState(isTesting || foundDir, "Examples jars directory '%s' does not exist.",
-        jarsDir.getAbsolutePath());
+            jarsDir.getAbsolutePath());
 
     if (foundDir) {
       for (File f: jarsDir.listFiles()) {
