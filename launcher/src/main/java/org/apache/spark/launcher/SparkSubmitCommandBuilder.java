@@ -376,7 +376,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    */
   private boolean isThriftServer(String mainClass) { // modify by kigo for: carbon thrift Server
     return (mainClass != null &&
-            ( mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2")) || mainClass.equals("org.apache.carbondata.spark.thriftserver.CarbonThriftServer"));
+            ( mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2") || mainClass.equals("org.apache.carbondata.spark.thriftserver.CarbonThriftServer")));
   }
 
   private List<String> findExamplesJars() {
