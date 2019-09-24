@@ -86,6 +86,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       SparkLauncher.NO_RESOURCE);
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
       SparkLauncher.NO_RESOURCE);
+    // add by kigo for: carbon thriftServer
+    specialClasses.put("org.apache.carbondata.spark.thriftserver.CarbonThriftServer",
+            SparkLauncher.NO_RESOURCE);
+    specialClasses.put("org.apache.spark.sql.hive.cli.CarbonSQLCLIDriver",
+            SparkLauncher.NO_RESOURCE);
   }
 
   final List<String> sparkArgs;
@@ -93,7 +98,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   private final boolean isExample;
 
   /**
-   * Controls whether mixing spark-submit arguments with app arguments is allowed. This is needed
+   * Controls whether dmixing spark-submit arguments with app arguments is allowed. This is needed
    * to parse the command lines for things like bin/spark-shell, which allows users to mix and
    * match arguments (e.g. "bin/spark-shell SparkShellArg --master foo").
    */
@@ -367,9 +372,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   /**
    * Return whether the given main class represents a thrift server.
    */
-  private boolean isThriftServer(String mainClass) {
+  private boolean isThriftServer(String mainClass) { // modify by kigo for: carbon thrift Server
     return (mainClass != null &&
-      mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"));
+            ( mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2") || mainClass.equals("org.apache.carbondata.spark.thriftserver.CarbonThriftServer")));
   }
 
   private List<String> findExamplesJars() {
